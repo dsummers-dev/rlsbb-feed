@@ -2,9 +2,10 @@
 """
 Fetch the RLSBB homepage, extract the 'Recommended movies' sidebar widget,
 and write an RSS feed where every item is a poster + link to the movie page.
+pubDates are staggered 1 minute apart so item order stays stable across refreshes.
 """
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from xml.sax.saxutils import escape
 
 import requests
@@ -43,22 +44,25 @@ def main() -> None:
     if widget is None:
         raise SystemExit("Widget 'Recommended movies' not found.")
 
-    now = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    now = datetime.now(timezone.utc)
     items = []
-    for a in widget.select("a[href]"):
+    for i, a in enumerate(widget.select("a[href]")):
         img = a.find("img")
         if not img or not img.get("src"):
             continue
         link  = a["href"]
         image = img["src"]
         title = slug_to_title(link)
+
+        item_date = (now - timedelta(minutes=i)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+
         items.append(f"""    <item>
       <title>{escape(title)}</title>
       <link>{escape(link)}</link>
       <guid isPermaLink="true">{escape(link)}</guid>
       <description><![CDATA[<a href="{link}"><img src="{image}" alt="{escape(title)}" /></a>]]></description>
       <enclosure url="{escape(image)}" type="image/jpeg" length="0" />
-      <pubDate>{now}</pubDate>
+      <pubDate>{item_date}</pubDate>
     </item>""")
 
     rss = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -68,7 +72,7 @@ def main() -> None:
     <link>{SOURCE_URL}</link>
     <description>{escape(FEED_DESC)}</description>
     <language>en-us</language>
-    <lastBuildDate>{now}</lastBuildDate>
+    <lastBuildDate>{now.strftime("%a, %d %b %Y %H:%M:%S +0000")}</lastBuildDate>
 {chr(10).join(items)}
   </channel>
 </rss>
